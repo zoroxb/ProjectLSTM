@@ -1,0 +1,184 @@
+
+
+```{r}
+scale_factorsO3 <- c(mean(datasetclean$o3), sd(datasetclean$o3))
+scale_factorsO3
+```
+```{r}
+scaled_trainO3 <- datasetclean %>%
+  select(o3) %>%
+  mutate(o3 = (o3 - scale_factorsO3[1])/scale_factorsO3[2])
+```
+
+```{r}
+scaled_trainO3 <- as.matrix(scaled_trainO3)
+```
+
+```{r}
+x_train_dataO3 <- t(sapply(
+    1:(length(scaled_trainO3) - lag - prediction + 1),
+    function(x) scaled_trainO3[x:(x + lag - 1), 1]
+  ))
+```
+
+
+```{r}
+x_train_arro3 <- array(
+    data = as.numeric(unlist(x_train_dataO3)),
+    dim = c(
+        nrow(x_train_dataO3),
+        lag,
+        1
+    )
+)
+```
+
+```{r}
+y_train_datao3 <- t(sapply(
+    (1 + lag):(length(scaled_trainO3) - prediction + 1),
+    function(x) scaled_trainO3[x:(x + prediction - 1)]
+))
+```
+
+```{r}
+y_train_arro3 <- array(
+    data = as.numeric(unlist(y_train_datao3)),
+    dim = c(
+        nrow(y_train_datao3),
+        prediction,
+        1
+    )
+)
+```
+
+```{r}
+x_testo3 <- datasetclean$o3[(nrow(scaled_trainO3) - prediction + 1):nrow(scaled_trainO3)]
+```
+
+```{r}
+x_test_scaledO3 <- (x_testo3 - scale_factorsO3[1]) / scale_factorsO3[2]
+```
+
+```{r}
+x_pred_arrO3 <- array(
+    data = x_test_scaledO3,
+    dim = c(
+        1,
+        lag,
+        1
+    )
+)
+```
+
+```{r}
+modelO3 <- keras_model_sequential()
+ 
+modelO3 %>%
+  layer_lstm(units = 50, # ukuran layer##
+       batch_input_shape = c(1, 12, 1), # batch size, timesteps, features
+       return_sequences = TRUE,
+       stateful = TRUE) %>%
+  # Tranformasi liner dari input
+  layer_dropout(rate = 0.5) %>%
+  layer_lstm(units = 50,
+        return_sequences = TRUE,
+        stateful = TRUE) %>%
+  layer_dropout(rate = 0.5) %>%
+  time_distributed(keras::layer_dense(units = 1))
+```
+
+```{r}
+modelO3 %>%
+    compile(loss = 'mae', optimizer = 'adam', metrics = 'accuracy')
+ 
+summary(modelO3)
+```
+```{r}
+historyO3<- modelO3 %>% fit(
+  x = x_train_arro3,
+  y = y_train_arro3,
+  batch_size = 1,
+  epochs = 50,
+  verbose = 1,
+  shuffle = FALSE,
+  validation_split = 0.2
+)
+```
+```{r}
+plot(historyCO)
+```
+```{r}
+lstm_forecastO3 <- modelO3%>%
+    predict(x_pred_arrO3, batch_size = 1) %>%
+    .[, , 1]
+```
+
+```{r}
+lstm_forecastO3 <- lstm_forecastO3 * scale_factorsO3[2] + scale_factorsO3[1]
+```
+
+```{r}
+library(timetk)
+```
+
+```{r}
+input_tsO3 <- timetk::tk_ts(datasetclean$o3, 
+    start = c(2022, 1), 
+    end = c(2022, 12), 
+    frequency = 12)
+```
+
+```{r}
+input_tsO3 <- input_tsO3[is.numeric(input_tsO3)]
+```
+
+```{r}
+input_tsO3 <- ts(input_tsO3)
+```
+
+```{r}
+library(forecast)
+```
+
+
+```{r}
+forecast_listO3 <- list(
+    model = NULL,
+    method = "LSTM",
+    mean = lstm_forecastO3,
+    x = input_tsO3,
+    fitted = fitted,
+    residuals = as.numeric(input_tsO3) - is.numeric(fitted)
+  )
+ 
+class(forecast_listO3) <- "forecast"
+```
+
+```{r}
+forecast_listO3$mean <- as.matrix(forecast_listO3$mean)
+forecast_listO3 <- forecast_listO3[-grep('xvar', names(forecast_listO3))]
+```
+
+```{r}
+forecast_listO3 <- cbind(forecast_listO3, mean = lstm_forecastO3,
+                       mean_se = NA, mean_ci_lower = NA, mean_ci_upper = NA)
+```
+
+```{r}
+matplot(forecast_listO3[, c("mean", "mean_ci_lower", "mean_ci_upper")],
+        type = "l", lty = 1, col = "magenta", xlab = "Bulan", ylab = "Nilai O3")
+        #legend("topright", legend = c("Mean", "Confidence Interval"), lty = 1, col = c("blue", "red"))
+```
+
+```{r}
+rmseo3<-rmse(input_tsO3,lstm_forecastO3)
+rmseo3
+```
+```{r}
+MAE_lstmO3 <- mae(input_tsO3, lstm_forecastO3)
+MAE_lstmO3
+```
+```{r}
+MAPE_lstmO3 <- mape(input_tsO3, lstm_forecastO3)
+MAPE_lstmO3
+```
