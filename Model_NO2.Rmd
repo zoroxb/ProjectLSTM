@@ -1,0 +1,188 @@
+```{r}
+scale_factorsNO2 <- c(mean(datasetclean$no2), sd(datasetclean$no2))
+scale_factorsNO2
+```
+
+```{r}
+scaled_trainNO2 <- datasetclean %>%
+  select(no2) %>%
+  mutate(no2 = (no2 - scale_factorsNO2[1])/scale_factorsNO2[2])
+```
+
+
+```{r}
+scaled_trainNO2 <- as.matrix(scaled_trainNO2)
+```
+
+
+```{r}
+x_train_dataNO2 <- t(sapply(
+    1:(length(scaled_trainNO2) - lag - prediction + 1),
+    function(x) scaled_trainNO2[x:(x + lag - 1), 1]
+  ))
+```
+
+```{r}
+x_train_arrNO2 <- array(
+    data = as.numeric(unlist(x_train_dataNO2)),
+    dim = c(
+        nrow(x_train_dataNO2),
+        lag,
+        1
+    )
+)
+```
+
+```{r}
+y_train_dataNO2 <- t(sapply(
+    (1 + lag):(length(scaled_trainNO2) - prediction + 1),
+    function(x) scaled_trainNO2[x:(x + prediction - 1)]
+))
+```
+
+```{r}
+y_train_arrNO2 <- array(
+    data = as.numeric(unlist(y_train_dataNO2)),
+    dim = c(
+        nrow(y_train_dataNO2),
+        prediction,
+        1
+    )
+)
+```
+
+```{r}
+x_testNO2 <- datasetclean$no2[(nrow(scaled_trainNO2) - prediction + 1):nrow(scaled_trainNO2)]
+```
+
+```{r}
+x_test_scaledNO2 <- (x_testNO2 - scale_factorsNO2[1]) / scale_factorsNO2[2]
+```
+
+```{r}
+x_pred_arrNO2 <- array(
+    data = x_test_scaledNO2,
+    dim = c(
+        1,
+        lag,
+        1
+    )
+)
+```
+
+```{r}
+modelNO2 <- keras_model_sequential()
+ 
+modelNO2 %>%
+  layer_lstm(units = 50, # ukuran layer##
+       batch_input_shape = c(1, 12, 1), # batch size, timesteps, features
+       return_sequences = TRUE,
+       stateful = TRUE) %>%
+  # Tranformasi liner dari input
+  layer_dropout(rate = 0.5) %>%
+  layer_lstm(units = 50,
+        return_sequences = TRUE,
+        stateful = TRUE) %>%
+  layer_dropout(rate = 0.5) %>%
+  time_distributed(keras::layer_dense(units = 1))
+```
+
+```{r}
+modelNO2 %>%
+    compile(loss = 'mae', optimizer = 'adam', metrics = 'accuracy')
+ 
+summary(modelNO2)
+```
+
+```{r}
+historyNO2<- modelNO2 %>% fit(
+  x = x_train_arrNO2,
+  y = y_train_arrNO2,
+  batch_size = 1,
+  epochs = 50,
+  verbose = 1,
+  shuffle = FALSE,
+  validation_split = 0.2
+)
+```
+
+```{r}
+plot(historyNO2)
+```
+
+```{r}
+lstm_forecastNO2 <- modelNO2%>%
+    predict(x_pred_arrNO2, batch_size = 1) %>%
+    .[, , 1]
+```
+
+```{r}
+lstm_forecastNO2 <- lstm_forecastNO2 * scale_factorsNO2[2] + scale_factorsNO2[1]
+```
+
+```{r}
+library(timetk)
+```
+
+```{r}
+input_tsNO2 <- timetk::tk_ts(datasetclean$no2, 
+    start = c(2022, 1), 
+    end = c(2022, 12), 
+    frequency = 12)
+```
+
+```{r}
+input_tsNO2 <- input_tsNO2[is.numeric(input_tsNO2)]
+```
+
+```{r}
+input_tsNO2 <- ts(input_tsNO2)
+```
+
+```{r}
+library(forecast)
+```
+
+
+```{r}
+forecast_listNO2 <- list(
+    model = NULL,
+    method = "LSTM",
+    mean = lstm_forecastNO2,
+    x = input_tsNO2,
+    fitted = fitted,
+    residuals = as.numeric(input_tsNO2) - is.numeric(fitted)
+  )
+ 
+class(forecast_listNO2) <- "forecast"
+```
+
+```{r}
+forecast_listNO2$mean <- as.matrix(forecast_listNO2$mean)
+forecast_listNO2 <- forecast_listNO2[-grep('xvar', names(forecast_listNO2))]
+```
+
+```{r}
+forecast_listNO2 <- cbind(forecast_listNO2, mean = lstm_forecastNO2,
+                       mean_se = NA, mean_ci_lower = NA, mean_ci_upper = NA)
+```
+
+```{r}
+matplot(forecast_listNO2[, c("mean", "mean_ci_lower", "mean_ci_upper")],
+        type = "l", lty = 1, col = "black", xlab = "Bulan", ylab = "Nilai NO2")
+        #legend("topright", legend = c("Mean", "Confidence Interval"), lty = 1, col = c("blue", "red"))
+```
+
+
+```{r}
+rmseno2<-rmse(input_tsNO2,lstm_forecastNO2)
+rmseno2
+```
+```{r}
+MAE_lstmNO2 <- mae(input_tsNO2, lstm_forecastNO2)
+MAE_lstmNO2
+```
+```{r}
+MAPE_lstmNO2 <- mape(input_tsNO2, lstm_forecastNO2)
+MAPE_lstmNO2
+```
