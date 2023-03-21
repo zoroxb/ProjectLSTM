@@ -1,0 +1,197 @@
+```{r}
+data_groupso2<-datasetclean%>%
+  group_by(Tanggal)%>%
+  summarise(
+    jmlh_so2=sum(so2)
+  )
+data_groupso2
+
+
+```
+
+```{r}
+scale_factorsSO2 <- c(mean(datasetclean$so2), sd(datasetclean$so2))
+scale_factorsSO2
+```
+```{r}
+scaled_trainSO2 <- datasetclean %>%
+  select(so2) %>%
+  mutate(so2 = (so2 - scale_factorsSO2[1])/scale_factorsSO2[2])
+```
+
+```{r}
+scaled_trainSO2 <- as.matrix(scaled_trainSO2)
+```
+
+```{r}
+x_train_dataSo2 <- t(sapply(
+    1:(length(scaled_trainSO2) - lag - prediction + 1),
+    function(x) scaled_trainSO2[x:(x + lag - 1), 1]
+  ))
+```
+
+
+```{r}
+x_train_arrSO2 <- array(
+    data = as.numeric(unlist(x_train_dataSo2)),
+    dim = c(
+        nrow(x_train_dataSo2),
+        lag,
+        1
+    )
+)
+```
+
+```{r}
+y_train_dataSO2 <- t(sapply(
+    (1 + lag):(length(scaled_trainSO2) - prediction + 1),
+    function(x) scaled_trainSO2[x:(x + prediction - 1)]
+))
+```
+
+```{r}
+y_train_arrSO2 <- array(
+    data = as.numeric(unlist(y_train_dataSO2)),
+    dim = c(
+        nrow(y_train_dataSO2),
+        prediction,
+        1
+    )
+)
+```
+
+```{r}
+x_testSO2 <- datasetclean$so2[(nrow(scaled_trainSO2) - prediction + 1):nrow(scaled_trainSO2)]
+```
+
+```{r}
+x_test_scaledSO2 <- (x_testSO2 - scale_factorsSO2[1]) / scale_factorsSO2[2]
+```
+
+```{r}
+x_pred_arrSO <- array(
+    data = x_test_scaledSO2,
+    dim = c(
+        1,
+        lag,
+        1
+    )
+)
+```
+
+```{r}
+modelSO2 <- keras_model_sequential()
+ 
+modelSO2 %>%
+  layer_lstm(units = 50, # ukuran layer##
+       batch_input_shape = c(1, 12, 1), # batch size, timesteps, features
+       return_sequences = TRUE,
+       stateful = TRUE) %>%
+  # Tranformasi liner dari input
+  layer_dropout(rate = 0.5) %>%
+  layer_lstm(units = 50,
+        return_sequences = TRUE,
+        stateful = TRUE) %>%
+  layer_dropout(rate = 0.5) %>%
+  time_distributed(keras::layer_dense(units = 1))
+```
+
+```{r}
+modelSO2 %>%
+    compile(loss = 'mae', optimizer = 'adam', metrics = 'accuracy')
+ 
+summary(modelSO2)
+```
+
+
+```{r}
+historySO2<- modelSO2 %>% fit(
+  x = x_train_arrSO2,
+  y = y_train_arrSO2,
+  batch_size = 1,
+  epochs = 50,
+  verbose = 1,
+  shuffle = FALSE,
+  validation_split = 0.2
+)
+```
+
+
+```{r}
+plot(historySO2)
+```
+```{r}
+lstm_forecastSO2 <- modelSO2%>%
+    predict(x_pred_arrSO, batch_size = 1) %>%
+    .[, , 1]
+```
+
+```{r}
+lstm_forecastSO2 <- lstm_forecastSO2 * scale_factorsSO2[2] + scale_factorsSO2[1]
+```
+
+```{r}
+library(timetk)
+```
+
+```{r}
+input_tsSO2 <- timetk::tk_ts(datasetclean$so2, 
+    start = c(2022, 1), 
+    end = c(2022, 12), 
+    frequency = 12)
+```
+
+```{r}
+input_tsSO2 <- input_tsSO2[is.numeric(input_tsSO2)]
+```
+
+```{r}
+input_tsSO2 <- ts(input_tsSO2)
+```
+
+```{r}
+library(forecast)
+```
+
+
+```{r}
+forecast_listSO2 <- list(
+    model = NULL,
+    method = "LSTM",
+    mean = lstm_forecastSO2,
+    x = input_tsSO2,
+    fitted = fitted,
+    residuals = as.numeric(input_tsSO2) - is.numeric(fitted)
+  )
+ 
+class(forecast_listSO2) <- "forecast"
+```
+
+```{r}
+forecast_listSO2$mean <- as.matrix(forecast_listSO2$mean)
+forecast_listSO2 <- forecast_list[-grep('xvar', names(forecast_listSO2))]
+```
+
+```{r}
+forecast_listSO2 <- cbind(forecast_listSO2, mean = lstm_forecastSO2,
+                       mean_se = NA, mean_ci_lower = NA, mean_ci_upper = NA)
+```
+
+```{r}
+matplot(forecast_listSO2[, c("mean", "mean_ci_lower", "mean_ci_upper")],
+        type = "l", lty = 1, col = "blue", xlab = "Bulan", ylab = "Nilai SO2")
+        #legend("topright", legend = c("Mean", "Confidence Interval"), lty = 1, col = c("blue", "red"))
+```
+```{r}
+rmseso2<-rmse(input_tsSO2,lstm_forecastSO2)
+rmseso2
+```
+```{r}
+MAE_lstmSO2 <- mae(input_tsSO2, lstm_forecastSO2)
+MAE_lstmSO2
+```
+
+```{r}
+MAPE_lstmSO2 <- mape(input_tsSO2, lstm_forecastSO2)
+MAPE_lstmSO2
+```
