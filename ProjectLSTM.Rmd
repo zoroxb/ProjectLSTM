@@ -1,0 +1,518 @@
+# 1. Load Packages/Library
+
+```{r}
+library(tensorflow)
+library(keras)
+library(readxl)
+library(dplyr)
+library (ggplot2)
+library (caTools)
+library(lubridate)
+library(caret)
+library(tibble)
+```
+
+
+# 2. Obtain Data
+```{r}
+dataset<- read.csv("Data/dataspku.csv")
+View(dataset)
+```
+
+## 2.1 Menghapus Variabel yang tidak diperlukan.
+```{r}
+dataset=dataset[,-1]
+```
+
+
+# 3. Scrub Data
+## a. Melihat Summary data
+```{r}
+summary(dataset)
+```
+
+
+
+## b. Mengubah Tipe Data Variabel PM10, so2, co, o3, no2
+```{r}
+dataset$pm10<-as.numeric(dataset$pm10)
+dataset$so2<-as.numeric(dataset$so2)
+dataset$co<-as.numeric(dataset$co)
+dataset$o3<-as.numeric(dataset$o3)
+dataset$no2<-as.numeric(dataset$no2)
+```
+Pada bagian ini dilakukan sebuah pengubahan tipe data variabel yang semula bertipe character diubah menjadi numeric
+
+
+
+## C. Mengubah tipe Data Variabel Tanggal
+```{r}
+datasetclean<-datasetclean%>%
+  mutate(Tanggal=ymd(Tanggal))%>%
+  arrange(Tanggal)
+```
+
+Pada bagian ini dilakukan sebuah pengubahan tipe data variabel Tanggal yang semula bertipe character diubah menjadi Date
+
+
+## D. Memeriksa data yang bersifat Missing Value
+```{r}
+colSums(is.na(dataset))
+```
+Dapat kita lihat pada bagian ini jumlah data yang bersifat missing value pada masing masing variabel
+
+
+## E. Membersihkan Data yang bersifat Missing Value
+```{r}
+datasetclean<-na.omit(dataset)
+```
+
+```{r}
+colSums(is.na(datasetclean))
+```
+Dapat kita lihat, sudah tidak ada data yang bersifat missing value pada masing masing variabel
+
+
+# 4. Explore Data
+## a. Analisis Deskriptif
+
+```{r}
+summary(datasetclean)
+```
+
+```{r}
+sd(datasetclean$pm10)
+sd(datasetclean$so2)
+sd(datasetclean$co)
+sd(datasetclean$o3)
+sd(datasetclean$no2)
+```
+Pada bagian ini dapat kita lihat hasil Standar Deviasi dari variabel pm10, so2, co, o3, no2
+
+
+
+## b. Visualisasi Data
+### b.1 Grouping Jumlah pada setiap partikulat
+```{r}
+pm10v<-datasetclean%>%
+  mutate(first_date_month=floor_date(Tanggal,unit="month"))%>%
+  group_by(first_date_month)%>%
+  summarise(jumlahPM10=sum(pm10))
+
+so2v<-datasetclean%>%
+  mutate(first_date_month=floor_date(Tanggal,unit="month"))%>%
+  group_by(first_date_month)%>%
+  summarise(jumlahSO2=sum(so2))
+
+cov<-datasetclean%>%
+  mutate(first_date_month=floor_date(Tanggal,unit="month"))%>%
+  group_by(first_date_month)%>%
+  summarise(jumlahCO=sum(co))
+
+o3v<-datasetclean%>%
+  mutate(first_date_month=floor_date(Tanggal,unit="month"))%>%
+  group_by(first_date_month)%>%
+  summarise(jumlahO3=sum(o3))
+
+no2v<-datasetclean%>%
+  mutate(first_date_month=floor_date(Tanggal,unit="month"))%>%
+  group_by(first_date_month)%>%
+  summarise(jumlahNO2=sum(no2))
+```
+
+### b.1.1 Visualisasi Data Jumlah partikulat polusi udara per bulan
+```{r}
+ggplot(data=pm10v,aes(x=first_date_month,y=jumlahPM10,color="PM10"))+
+  geom_line()+
+  geom_line(data = so2v,aes(x=first_date_month,y=jumlahSO2,color="SO2"))+
+  geom_line(data = cov,aes(x=first_date_month,y=jumlahCO,color="CO"))+
+  geom_line(data = o3v,aes(x=first_date_month,y=jumlahO3,color="O3"))+
+  geom_line(data = no2v,aes(x=first_date_month,y=jumlahNO2,color="NO2"))+
+  labs(title = "Jumlah Partikel Polusi Udara Per Bulan",
+       x="Tahun",
+       y="Jumlah Partikel (ug/m3",
+       subtitle = "Data terakhir 31 Desember 2021")+
+  theme_minimal()+
+  scale_x_date(date_labels = "%Y",date_breaks = "1 year")+
+  scale_color_manual(values = c("#aa6200","#dd9533","#33dd95","#4033dd","#d0dd33"),
+                     labels=c("PM10","SO2","CO","O3","NO2"))+
+  theme(legend.position = "top")
+```
+
+
+### b.2 Visualisasi Data Partikulat Polusi Udara PM10
+```{r}
+datasetclean %>% 
+  select(pm10,Tanggal) %>%
+  ggplot(aes(x = Tanggal,y=pm10)) +
+  geom_line(aes(col = pm10)) +
+  labs(title = "Tingkat Partikulat PM10",
+       x = "Tahun",
+       y = "Nilai PM10") +
+  theme_minimal()
+```
+
+### b.3 Visualisasi Data SO2
+```{r}
+datasetclean %>% 
+  select(so2,Tanggal) %>%
+  ggplot(aes(x = Tanggal,y=so2)) +
+  geom_line(aes(col = so2)) +
+  labs(title = "Tingkat Sulfur Dioksida",
+       x = "Tahun",
+       y = "Nilai SO2") +
+  theme_minimal()
+```
+
+
+### b.4 Visualisasi Data CO
+```{r}
+datasetclean %>% 
+  select(co,Tanggal) %>%
+  ggplot(aes(x = Tanggal,y=co)) +
+  geom_line(aes(col = co)) +
+  labs(title = "Tingkat Karbon Monoksida",
+       x = "Tahun",
+       y = "Nilai CO") +
+  theme_minimal()
+```
+
+
+
+### b.5 Visualisasi Data O3
+```{r}
+datasetclean %>% 
+  select(o3,Tanggal) %>%
+  ggplot(aes(x = Tanggal,y=o3)) +
+  geom_line(aes(col = o3)) +
+  labs(title = "Tingkat Ozon",
+       x = "Tahun",
+       y = "Nilai O3") +
+  theme_minimal()
+```
+
+### b.6 Visualisasi Data no2
+```{r}
+datasetclean %>% 
+  select(no2,Tanggal) %>%
+  ggplot(aes(x = Tanggal,y=no2)) +
+  geom_line(aes(col = no2)) +
+  labs(title = "Tingkat Nitrogen Dioksida",
+       x = "Tahun",
+       y = "Nilai NO2") +
+  theme_minimal()
+```
+
+
+### b.7 Visualisasi Data PM10 berdasarkan salah satu Stasiun
+```{r}
+datasetclean %>% 
+  filter(Stasiun==("DKI1 (Bunderan HI)"))%>%
+  select(pm10,Stasiun,Tanggal) %>%
+  ggplot(aes(x = Tanggal,y=pm10))+
+  geom_line(aes(col = Stasiun)) +
+  labs(title = "Tingkat Partikulat PM10 Pada stasiun DKI1 (Bunderan HI)",
+       x = "Tahun",
+       y = "Nilai PM10") +
+  theme_minimal()
+```
+
+# 5. Model
+Definisikan model prediksi yang akan dilakukan berdasarkan metode yg digunakan LSTM.
+
+
+## a. Data Preparation
+```{r}
+data_group<-datasetclean%>%
+  group_by(Tanggal)%>%
+  summarise(
+    jmlh_pm10=sum(pm10)
+  )
+data_group
+
+```
+
+
+
+```{r}
+datasetclean$Tanggal<-as.Date(datasetclean$Tanggal,format="%Y-%m-%d")
+```
+
+```{r}
+ggplot(datasetclean, aes(x = Tanggal, y = pm10)) +
+  geom_line(color = "green", size = 1) +
+  ylab("Jumlah PM10") + 
+  xlab("Tanggal") + 
+  scale_x_date(date_breaks = "1 years", date_labels = "%b %Y")+
+  theme(axis.text.x = element_text(size = 10.5)) +
+  theme_minimal()
+```
+
+
+```{r}
+data_group$Tanggal <- as.Date(data_group$Tanggal, format = "%Y-%m-%d")
+data_group
+```
+
+```{r}
+ggplot(data_group, aes(x = Tanggal, y = jmlh_pm10)) +
+  geom_line(color = "blue") +
+  ylab("Jumlah PM10") + 
+  xlab("Tanggal") + 
+  scale_x_date(date_breaks = "1 years", date_labels = "%b %Y")+
+  theme(axis.text.x = element_text(size = 10.5)) +
+  theme_minimal()
+
+```
+
+```{r}
+scale_factors <- c(mean(datasetclean$pm10), sd(datasetclean$pm10))
+scale_factors
+```
+
+```{r}
+scaled_train <- datasetclean %>%
+  select(pm10) %>%
+  mutate(pm10 = (pm10 - scale_factors[1])/scale_factors[2])
+```
+
+```{r}
+prediction <- 12
+lag <- prediction
+```
+
+
+```{r}
+scaled_train <- as.matrix(scaled_train)
+```
+
+
+```{r}
+x_train_data <- t(sapply(
+    1:(length(scaled_train) - lag - prediction + 1),
+    function(x) scaled_train[x:(x + lag - 1), 1]
+  ))
+```
+
+```{r}
+x_train_arr <- array(
+    data = as.numeric(unlist(x_train_data)),
+    dim = c(
+        nrow(x_train_data),
+        lag,
+        1
+    )
+)
+```
+
+```{r}
+y_train_data <- t(sapply(
+    (1 + lag):(length(scaled_train) - prediction + 1),
+    function(x) scaled_train[x:(x + prediction - 1)]
+))
+```
+
+```{r}
+y_train_arr <- array(
+    data = as.numeric(unlist(y_train_data)),
+    dim = c(
+        nrow(y_train_data),
+        prediction,
+        1
+    )
+)
+```
+
+```{r}
+x_test <- datasetclean$pm10[(nrow(scaled_train) - prediction + 1):nrow(scaled_train)]
+```
+
+```{r}
+x_test_scaled <- (x_test - scale_factors[1]) / scale_factors[2]
+```
+
+```{r}
+x_pred_arr <- array(
+    data = x_test_scaled,
+    dim = c(
+        1,
+        lag,
+        1
+    )
+)
+```
+
+```{r}
+model <- keras_model_sequential()
+ 
+model %>%
+  layer_lstm(units = 50, # ukuran layer##
+       batch_input_shape = c(1, 12, 1), # batch size, timesteps, features
+       return_sequences = TRUE,
+       stateful = TRUE) %>%
+  # Tranformasi liner dari input
+  layer_dropout(rate = 0.5) %>%
+  layer_lstm(units = 50,
+        return_sequences = TRUE,
+        stateful = TRUE) %>%
+  layer_dropout(rate = 0.5) %>%
+  time_distributed(keras::layer_dense(units = 1))
+```
+
+```{r}
+model %>%
+    compile(loss = 'mae', optimizer = 'adam', metrics = 'accuracy')
+ 
+summary(model)
+```
+
+```{r}
+history<- model %>% fit(
+  x = x_train_arr,
+  y = y_train_arr,
+  batch_size = 1,
+  epochs = 50,
+  verbose = 1,
+  shuffle = FALSE,
+  validation_split = 0.2
+)
+```
+
+```{r}
+plot(history)
+```
+
+```{r}
+lstm_forecast <- model %>%
+    predict(x_pred_arr, batch_size = 1) %>%
+    .[, , 1]
+```
+
+```{r}
+lstm_forecast <- lstm_forecast * scale_factors[2] + scale_factors[1]
+```
+
+```{r}
+library(timetk)
+```
+
+```{r}
+input_ts <- timetk::tk_ts(datasetclean$pm10, 
+    start = c(2022, 1), 
+    end = c(2022, 12), 
+    frequency = 12)
+```
+
+```{r}
+input_ts <- input_ts[is.numeric(input_ts)]
+```
+
+```{r}
+input_ts <- ts(input_ts)
+```
+
+```{r}
+library(forecast)
+```
+
+
+```{r}
+forecast_list <- list(
+    model = NULL,
+    method = "LSTM",
+    mean = lstm_forecast,
+    x = input_ts,
+    fitted = fitted,
+    residuals = as.numeric(input_ts) - is.numeric(fitted)
+  )
+ 
+class(forecast_list) <- "forecast"
+```
+
+```{r}
+forecast_list$mean <- as.matrix(forecast_list$mean)
+forecast_list <- forecast_list[-grep('xvar', names(forecast_list))]
+```
+
+```{r}
+forecast_list <- cbind(forecast_list, mean = lstm_forecast,
+                       mean_se = NA, mean_ci_lower = NA, mean_ci_upper = NA)
+```
+
+```{r}
+matplot(forecast_list[, c("mean", "mean_ci_lower", "mean_ci_upper")],
+        type = "l", lty = 1, col = "green", xlab = "Bulan", ylab = "Nilai PM10")
+        #legend("topright", legend = c("Mean", "Confidence Interval"), lty = 1, col = c("blue", "red"))
+```
+
+
+
+## g. Evaluasi Model
+```{r}
+library(Metrics)
+```
+
+
+```{r}
+MSE_lstm <- mse(input_ts, lstm_forecast)
+MSE_lstm
+
+```
+```{r}
+RMSE_lstm <- sqrt(MSE_lstm)
+RMSE_lstm
+```
+```{r}
+MAE_lstm <- mae(input_ts, lstm_forecast)
+MAE_lstm
+```
+```{r}
+MAPE_lstm <- mape(input_ts, lstm_forecast)
+MAPE_lstm
+```
+
+
+## f. Matriks Evaluasi Model
+
+
+```{r}
+rmse<-data.frame(Variabel=c("NO2","O3","SO2","PM10","CO"),
+  NilaiRMSE = c(rmseno2,rmseo3,rmseso2,RMSE_lstm,rsmeco),
+  NilaiMAE=c(MAE_lstmNO2,MAE_lstmO3,MAE_lstmSO2,MAE_lstm,MAE_lstmCO),
+  NilaiMAPE=c(MAPE_lstmNO2,MAPE_lstmO3,MAPE_lstmSO2,MAPE_lstm,MAPE_lstmCO),
+  NilaiAkurasi=c(AkurasiNO2,AkurasiO3,AkurasiSO2,akurasiPM10,AkurasiCO)
+                 )
+rmse
+```
+## h. Uji Validitas Akurasi
+
+```{r}
+akurasiPM10<-100-MAPE_lstm
+akurasiPM10
+
+AkurasiNO2<-100-MAPE_lstmNO2
+AkurasiNO2
+
+AkurasiO3<-100-MAPE_lstmO3
+AkurasiO3
+
+AkurasiSO2<-100-MAPE_lstmSO2
+AkurasiSO2
+
+AkurasiCO<-100-MAPE_lstmCO
+AkurasiCO
+```
+
+## i. Visualisasi 5 Variabel
+
+```{r}
+datavis<-cbind(forecast_list,forecast_listCO,forecast_listNO2,forecast_listO3,forecast_listSO2)
+```
+
+
+```{r}
+matplot(datavis, type = "l", lty = 1, lwd = 2, xlab = "Bulan", main="Visualisasi Lima Variabel Penting",col.main="blue" ,ylab = "Nilaix", col = c("blue", "green","red","magenta","pink"))
+legend("right", legend = c("PM10", "SO2","O3","NO2","CO"), col=c("blue", "green","red","magenta","pink"), pch="-")
+```
+
+
