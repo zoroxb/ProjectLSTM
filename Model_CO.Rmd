@@ -1,0 +1,194 @@
+```{r}
+data_groupco<-datasetclean%>%
+  group_by(Tanggal)%>%
+  summarise(
+    jmlh_CO=sum(co)
+  )
+data_groupco
+
+
+```
+
+```{r}
+scale_factorsCO <- c(mean(datasetclean$co), sd(datasetclean$co))
+scale_factorsCO
+```
+```{r}
+scaled_trainco <- datasetclean %>%
+  select(co) %>%
+  mutate(co = (co - scale_factorsCO[1])/scale_factorsCO[2])
+```
+
+```{r}
+scaled_trainco <- as.matrix(scaled_trainco)
+```
+
+```{r}
+x_train_dataco <- t(sapply(
+    1:(length(scaled_trainco) - lag - prediction + 1),
+    function(x) scaled_trainco[x:(x + lag - 1), 1]
+  ))
+```
+
+
+```{r}
+x_train_arrco <- array(
+    data = as.numeric(unlist(x_train_dataco)),
+    dim = c(
+        nrow(x_train_dataco),
+        lag,
+        1
+    )
+)
+```
+
+```{r}
+y_train_dataco <- t(sapply(
+    (1 + lag):(length(scaled_trainco) - prediction + 1),
+    function(x) scaled_trainco[x:(x + prediction - 1)]
+))
+```
+
+```{r}
+y_train_arrco <- array(
+    data = as.numeric(unlist(y_train_dataco)),
+    dim = c(
+        nrow(y_train_dataco),
+        prediction,
+        1
+    )
+)
+```
+
+```{r}
+x_testco <- datasetclean$co[(nrow(scaled_trainco) - prediction + 1):nrow(scaled_trainco)]
+```
+
+```{r}
+x_test_scaledco <- (x_testco - scale_factorsCO[1]) / scale_factorsCO[2]
+```
+
+```{r}
+x_pred_arrCO <- array(
+    data = x_test_scaledco,
+    dim = c(
+        1,
+        lag,
+        1
+    )
+)
+```
+
+```{r}
+modelCO <- keras_model_sequential()
+ 
+modelCO %>%
+  layer_lstm(units = 50, # ukuran layer##
+       batch_input_shape = c(1, 12, 1), # batch size, timesteps, features
+       return_sequences = TRUE,
+       stateful = TRUE) %>%
+  # Tranformasi liner dari input
+  layer_dropout(rate = 0.5) %>%
+  layer_lstm(units = 50,
+        return_sequences = TRUE,
+        stateful = TRUE) %>%
+  layer_dropout(rate = 0.5) %>%
+  time_distributed(keras::layer_dense(units = 1))
+```
+
+```{r}
+modelCO %>%
+    compile(loss = 'mae', optimizer = 'adam', metrics = 'accuracy')
+ 
+summary(modelCO)
+```
+```{r}
+historyCO<- modelCO %>% fit(
+  x = x_train_arrco,
+  y = y_train_arrco,
+  batch_size = 1,
+  epochs = 50,
+  verbose = 1,
+  shuffle = FALSE,
+  validation_split = 0.2
+)
+```
+```{r}
+plot(historyCO)
+```
+```{r}
+lstm_forecastCO <- modelCO %>%
+    predict(x_pred_arrCO, batch_size = 1) %>%
+    .[, , 1]
+```
+
+```{r}
+lstm_forecastCO <- lstm_forecastCO * scale_factorsCO[2] + scale_factorsCO[1]
+```
+
+```{r}
+library(timetk)
+```
+
+```{r}
+input_tsCO <- timetk::tk_ts(datasetclean$co, 
+    start = c(2022, 1), 
+    end = c(2022, 12), 
+    frequency = 12)
+```
+
+```{r}
+input_tsCO <- input_tsCO[is.numeric(input_tsCO)]
+```
+
+```{r}
+input_tsCO <- ts(input_tsCO)
+```
+
+```{r}
+library(forecast)
+```
+
+
+```{r}
+forecast_listCO <- list(
+    model = NULL,
+    method = "LSTM",
+    mean = lstm_forecastCO,
+    x = input_tsCO,
+    fitted = fitted,
+    residuals = as.numeric(input_tsCO) - is.numeric(fitted)
+  )
+ 
+class(forecast_listCO) <- "forecast"
+```
+
+```{r}
+forecast_listCO$mean <- as.matrix(forecast_listCO$mean)
+forecast_listCO <- forecast_listCO[-grep('xvar', names(forecast_listCO))]
+```
+
+```{r}
+forecast_listCO <- cbind(forecast_listCO, mean = lstm_forecastCO,
+                       mean_se = NA, mean_ci_lower = NA, mean_ci_upper = NA)
+```
+
+```{r}
+matplot(forecast_listCO[, c("mean", "mean_ci_lower", "mean_ci_upper")],
+        type = "l", lty = 1, col = "red", xlab = "Bulan", ylab = "Nilai CO")
+        #legend("topright", legend = c("Mean", "Confidence Interval"), lty = 1, col = c("blue", "red"))
+```
+
+```{r}
+rsmeco<-rmse(input_tsCO,lstm_forecastCO)
+rsmeco
+```
+
+```{r}
+MAE_lstmCO <- mae(input_tsCO, lstm_forecastCO)
+MAE_lstmCO
+```
+```{r}
+MAPE_lstmCO <- mape(input_tsCO, lstm_forecastCO)
+MAPE_lstmCO
+```
