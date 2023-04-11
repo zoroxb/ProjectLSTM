@@ -515,4 +515,68 @@ matplot(datavis, type = "l", lty = 1, lwd = 2, xlab = "Bulan", main="Visualisasi
 legend("right", legend = c("PM10", "SO2","O3","NO2","CO"), col=c("blue", "green","red","magenta","pink"), pch="-")
 ```
 
+## j, Visualisasi kelima Variabel dengan GGplot
+
+Mengubah list tersebut menjadi vektor, menggunakan fungsi unlist() seperti berikut:
+
+```{r}
+pm10_vector<-unlist(forecast_list)
+CO_vector<-unlist(forecast_listCO)
+NO2_vector<-unlist(forecast_listNO2)
+O3_vector<-unlist(forecast_listO3)
+SO2_vector<-unlist(forecast_listSO2)
+
+```
+
+
+Membersihkan Data yang bersifat Missing value (NA)
+
+```{r}
+pm10_vector<-na.omit(pm10_vector)
+CO_vector<-na.omit(CO_vector)
+NO2_vector<-na.omit(NO2_vector)
+O3_vector<-na.omit(O3_vector)
+SO2_vector<-na.omit(SO2_vector)
+```
+
+Mengubah Vector menjadi Time Series
+
+```{r}
+pm10_TS <- ts(pm10_vector, start = c(2022, 1), frequency = 12)
+CO_TS <- ts(CO_vector, start = c(2022, 1), frequency = 12)
+NO2_TS <- ts(NO2_vector, start = c(2022, 1), frequency = 12)
+O3_TS <- ts(O3_vector, start = c(2022, 1), frequency = 12)
+SO2_TS <- ts(SO2_vector, start = c(2022, 1), frequency = 12)
+
+```
+
+Menyatukan data kedalam satu dataframe
+
+```{r}
+df <- data.frame(date = time(pm10_TS),
+                 pm10 = pm10_TS,
+                 co = CO_TS,
+                 no2 = NO2_TS,
+                 o3 = O3_TS,
+                 so2 = SO2_TS)
+```
+
+
+Reshaping Data
+
+```{r}
+df_melted <- melt(df, id.vars = "date")
+```
+
+Visualisasi Plot Line Chart
+
+```{r}
+ggplot(df_melted, aes(x = date, y = value, color = variable)) +
+  geom_line() +
+  labs(title = "Air Pollutant Time Series",
+       x = "Date",
+       y = "Nilai",
+       color = "Polusi")
+```
+
 
